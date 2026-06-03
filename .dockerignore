@@ -1,0 +1,14 @@
+node_modules
+.env
+.env.*
+!.env.example
+!.env.development.example
+!.env.test.example
+!.env.production.example
+data
+coverage
+.git
+.gitignore
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

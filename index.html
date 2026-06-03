@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echoes of Tomorrow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #eaeaea;
+            line-height: 1.6;
+        }
+        
+        .game-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 30px 0;
+            border-bottom: 2px solid #e94560;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            color: #e94560;
+            text-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+            letter-spacing: 3px;
+        }
+        
+        .header .subtitle {
+            color: #a0a0a0;
+            font-style: italic;
+            margin-top: 10px;
+        }
+        
+        .story-panel {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(233, 69, 96, 0.3);
+            overflow-y: auto;
+            max-height: 60vh;
+        }
+        
+        .story-text {
+            font-size: 1.1rem;
+            line-height: 1.8;
+            white-space: pre-wrap;
+        }
+        
+        .story-text .narrative {
+            color: #eaeaea;
+        }
+        
+        .story-text .dialogue {
+            color: #ffd700;
+            font-style: italic;
+        }
+        
+        .story-text .thought {
+            color: #87ceeb;
+            font-style: italic;
+        }
+        
+        .choices-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .choice-btn {
+            background: linear-gradient(135deg, #e94560 0%, #c73e54 100%);
+            border: none;
+            color: white;
+            padding: 18px 25px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: left;
+            font-family: inherit;
+        }
+        
+        .choice-btn:hover {
+            transform: translateX(10px);
+            box-shadow: 0 5px 20px rgba(233, 69, 96, 0.4);
+        }
+        
+        .choice-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .stats-bar {
+            display: flex;
+            justify-content: space-around;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-label {
+            font-size: 0.8rem;
+            color: #a0a0a0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .stat-value {
+            font-size: 1.3rem;
+            color: #e94560;
+            font-weight: bold;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #a0a0a0;
+        }
+        
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+        
+        .start-screen {
+            text-align: center;
+            padding: 60px 20px;
+        }
+        
+        .start-screen h2 {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            color: #e94560;
+        }
+        
+        .start-screen p {
+            margin-bottom: 30px;
+            color: #a0a0a0;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .start-btn {
+            background: linear-gradient(135deg, #e94560 0%, #c73e54 100%);
+            border: none;
+            color: white;
+            padding: 20px 50px;
+            border-radius: 30px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+        
+        .start-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(233, 69, 96, 0.5);
+        }
+
+        .world-panel,
+        .journal-panel,
+        .resume-panel,
+        .threads-panel,
+        .quest-panel,
+        .faction-panel {
+            background: rgba(0, 0, 0, 0.28);
+            border: 1px solid rgba(233, 69, 96, 0.22);
+            border-radius: 10px;
+            padding: 18px;
+            margin-bottom: 18px;
+        }
+
+        .world-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .world-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(233, 69, 96, 0.14);
+            color: #ffd7de;
+            font-size: 0.92rem;
+            border: 1px solid rgba(233, 69, 96, 0.28);
+        }
+
+        .arc-badge {
+            background: rgba(255, 215, 0, 0.12);
+            border-color: rgba(255, 215, 0, 0.24);
+            color: #ffe28a;
+        }
+
+        .thread-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .thread-pill {
+            display: inline-flex;
+            gap: 6px;
+            align-items: center;
+            border-radius: 999px;
+            padding: 8px 12px;
+            background: rgba(255, 215, 0, 0.08);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            color: #f9e7a8;
+            font-size: 0.92rem;
+        }
+
+        .journal-trait {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(135, 206, 235, 0.14);
+            color: #87ceeb;
+            font-size: 0.9rem;
+        }
+
+        .journal-outcome {
+            margin-top: 6px;
+            color: #c7d0e0;
+            font-size: 0.95rem;
+        }
+
+        .objective-label,
+        .panel-title {
+            color: #ffd700;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 8px;
+        }
+
+        .objective-text,
+        .resume-meta,
+        .journal-empty {
+            color: #c7d0e0;
+        }
+
+        .consequence-panel {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .consequence-deltas {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .journal-entry {
+            padding: 12px 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .journal-entry:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .journal-turn,
+        .resume-title {
+            color: #f4f6fb;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .journal-choice {
+            color: #f0f3f9;
+            margin-bottom: 4px;
+        }
+
+        .resume-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .resume-btn {
+            width: 100%;
+            text-align: left;
+            background: rgba(255, 255, 255, 0.04);
+            color: inherit;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 14px 16px;
+            cursor: pointer;
+            transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+            font-family: inherit;
+        }
+
+        .resume-btn:hover {
+            transform: translateY(-1px);
+            border-color: rgba(233, 69, 96, 0.45);
+            background: rgba(233, 69, 96, 0.08);
+        }
+
+        .resume-arc {
+            margin-top: 6px;
+            color: #ffe28a;
+            font-size: 0.9rem;
+        }
+
+        .resume-quest {
+            margin-top: 4px;
+            color: #b8d4ff;
+            font-size: 0.9rem;
+        }
+
+        .quest-stage,
+        .quest-progress,
+        .standing-value {
+            color: #b8d4ff;
+            font-size: 0.95rem;
+        }
+
+        .standing-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .resource-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .resource-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 0.92rem;
+            color: #f4f6fb;
+        }
+
+        .resource-positive {
+            border-color: rgba(76, 175, 80, 0.35);
+            color: #d7ffd9;
+        }
+
+        .resource-negative {
+            border-color: rgba(233, 69, 96, 0.35);
+            color: #ffd2db;
+        }
+
+        .consequence-list {
+            margin-top: 14px;
+        }
+
+        .resource-panel .journal-empty {
+            margin-top: 6px;
+        }
+
+        .standing-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .standing-positive {
+            border: 1px solid rgba(76, 175, 80, 0.35);
+        }
+
+        .standing-negative {
+            border: 1px solid rgba(233, 69, 96, 0.35);
+        }
+
+        .standing-neutral {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 1.8rem;
+            }
+            
+            .story-panel {
+                padding: 15px;
+            }
+            
+            .story-text {
+                font-size: 1rem;
+            }
+            
+            .choice-btn {
+                padding: 15px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <h1>⚡ ECHOES OF TOMORROW</h1>
+            <div class="subtitle">Where every choice echoes across time</div>
+        </div>
+        
+        <div id="game-content">
+            <!-- Game content loads here -->
+        </div>
+    </div>
+    
+    <script src="game.js"></script>
+</body>
+</html>
