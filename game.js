@@ -1338,6 +1338,7 @@ function renderStartScreen(container) {
         ? `
             <div class="resume-panel">
                 <div class="panel-title">Resume a Recent Echo</div>
+                <div class="resume-quest">These saves belong to this browser and device.</div>
                 <div class="resume-list">
                     ${GameState.recentSaves.map((save) => {
                         const resumeExtras = [
@@ -1361,6 +1362,7 @@ function renderStartScreen(container) {
         : `
             <div class="resume-panel empty">
                 <div class="panel-title">Resume a Recent Echo</div>
+                <div class="resume-quest">Saves stay with this browser and device for now.</div>
                 <div class="journal-empty">No saved echoes yet — begin a journey and the fracture will remember it.</div>
             </div>
         `;
@@ -1370,6 +1372,7 @@ function renderStartScreen(container) {
             <h2>The Fracture Awaits</h2>
             <p>In a world where time itself has shattered, you are an Echo—a being who can move between fragments of reality. Every choice you make resonates across timelines, shaping not just your fate, but the fate of countless worlds.</p>
             <p>This is a procedural storytelling experience powered by local AI. Each playthrough generates a unique narrative based on your choices.</p>
+            <p>Your saved story stays with this browser and device for now, so switching devices or clearing browser data may hide your echo.</p>
             <button class="start-btn" data-start-game="true">Begin Your Journey</button>
             ${recentSavesMarkup}
         </div>
