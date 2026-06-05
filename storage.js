@@ -45,6 +45,34 @@ function listRecentSaves(source, limit = 6) {
         .slice(0, limit);
 }
 
+function normalizePlayerId(playerId) {
+    return playerId ? String(playerId).trim() : '';
+}
+
+function isOwnedByPlayer(save, playerId) {
+    const normalizedPlayerId = normalizePlayerId(playerId);
+    if (!normalizedPlayerId) {
+        return false;
+    }
+
+    return normalizePlayerId(save?.playerId) === normalizedPlayerId;
+}
+
+function assertPlayerOwnsSave(existingSave, sessionId, playerId) {
+    if (existingSave && !isOwnedByPlayer(existingSave, playerId)) {
+        const error = new Error(`Session ${sessionId} belongs to a different player`);
+        error.code = 'SAVE_OWNERSHIP_MISMATCH';
+        throw error;
+    }
+}
+
+function normalizeLegacySave(save = {}) {
+    return {
+        ...save,
+        playerId: normalizePlayerId(save?.playerId) || 'legacy-public'
+    };
+}
+
 function getStorageConfig(env = process.env, baseDir = __dirname) {
     const saveDir = env.SAVE_DIR || path.join(baseDir, 'data');
 
@@ -65,7 +93,7 @@ function readLegacySaves(legacySavesFile) {
 
     try {
         const data = JSON.parse(fs.readFileSync(legacySavesFile, 'utf8'));
-        return new Map(Object.entries(data));
+        return new Map(Object.entries(data).map(([sessionId, save]) => [sessionId, normalizeLegacySave(save)]));
     } catch (error) {
         console.error('Failed to load legacy saves:', error.message);
         return new Map();
@@ -88,16 +116,26 @@ function createFileStorage(config) {
                 saves.set(sessionId, save);
             }
         },
-        async saveGame(sessionId, state, savedAt = new Date().toISOString()) {
-            saves.set(sessionId, { state, savedAt });
+        async saveGame(sessionId, state, savedAt = new Date().toISOString(), playerId) {
+            const normalizedPlayerId = normalizePlayerId(playerId);
+            if (!normalizedPlayerId) {
+                throw new Error('File storage saveGame requires playerId');
+            }
+
+            assertPlayerOwnsSave(saves.get(sessionId), sessionId, normalizedPlayerId);
+            saves.set(sessionId, { state, savedAt, playerId: normalizedPlayerId });
             fs.writeFileSync(savesFile, JSON.stringify(Object.fromEntries(saves), null, 2));
             return { sessionId, savedAt };
         },
-        async loadGame(sessionId) {
-            return saves.get(sessionId) || null;
+        async loadGame(sessionId, playerId) {
+            const save = saves.get(sessionId);
+            return isOwnedByPlayer(save, playerId) ? save : null;
         },
-        async listRecentSaves(limit = 6) {
-            return listRecentSaves(saves, limit);
+        async listRecentSaves(limit = 6, playerId) {
+            const filteredSaves = new Map(
+                [...saves.entries()].filter(([, save]) => isOwnedByPlayer(save, playerId))
+            );
+            return listRecentSaves(filteredSaves, limit);
         },
         async countSaves() {
             return saves.size;
@@ -137,6 +175,14 @@ function createTursoStorage(config) {
                 wound_count INTEGER NOT NULL DEFAULT 0
             )
         `);
+
+        const columnsResult = await client.execute('PRAGMA table_info(saves)');
+        const hasPlayerId = columnsResult.rows.some((row) => row.name === 'player_id');
+        if (!hasPlayerId) {
+            await client.execute("ALTER TABLE saves ADD COLUMN player_id TEXT NOT NULL DEFAULT 'legacy-public'");
+        }
+
+        await client.execute('CREATE INDEX IF NOT EXISTS idx_saves_player_saved_at ON saves (player_id, saved_at DESC)');
     }
 
     async function importLegacySavesIfNeeded() {
@@ -152,16 +198,28 @@ function createTursoStorage(config) {
 
         const legacySaves = readLegacySaves(config.legacySavesFile);
         for (const [sessionId, save] of legacySaves.entries()) {
-            await saveGame(sessionId, save.state, save.savedAt);
+            await saveGame(sessionId, save.state, save.savedAt, save.playerId);
         }
     }
 
-    async function saveGame(sessionId, state, savedAt = new Date().toISOString()) {
+    async function saveGame(sessionId, state, savedAt = new Date().toISOString(), playerId) {
+        const normalizedPlayerId = normalizePlayerId(playerId);
+        if (!normalizedPlayerId) {
+            throw new Error('Turso storage saveGame requires playerId');
+        }
+
+        const existingSave = await client.execute({
+            sql: 'SELECT player_id FROM saves WHERE session_id = ?',
+            args: [sessionId]
+        });
+        assertPlayerOwnsSave(existingSave.rows?.[0] ? { playerId: existingSave.rows[0].player_id } : null, sessionId, normalizedPlayerId);
+
         const summary = summarizeSave(sessionId, { state, savedAt });
         await client.execute({
             sql: `
                 INSERT INTO saves (
                     session_id,
+                    player_id,
                     saved_at,
                     state_json,
                     turn,
@@ -172,8 +230,9 @@ function createTursoStorage(config) {
                     quest_title,
                     inventory_count,
                     wound_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(session_id) DO UPDATE SET
+                    player_id = excluded.player_id,
                     saved_at = excluded.saved_at,
                     state_json = excluded.state_json,
                     turn = excluded.turn,
@@ -187,6 +246,7 @@ function createTursoStorage(config) {
             `,
             args: [
                 sessionId,
+                normalizedPlayerId,
                 savedAt,
                 JSON.stringify(state),
                 summary.turn,
@@ -209,10 +269,10 @@ function createTursoStorage(config) {
             await importLegacySavesIfNeeded();
         },
         saveGame,
-        async loadGame(sessionId) {
+        async loadGame(sessionId, playerId) {
             const result = await client.execute({
-                sql: 'SELECT saved_at, state_json FROM saves WHERE session_id = ?',
-                args: [sessionId]
+                sql: 'SELECT saved_at, state_json, player_id FROM saves WHERE session_id = ? AND player_id = ?',
+                args: [sessionId, normalizePlayerId(playerId)]
             });
 
             const row = result.rows?.[0];
@@ -222,19 +282,21 @@ function createTursoStorage(config) {
 
             return {
                 savedAt: row.saved_at,
-                state: JSON.parse(row.state_json)
+                state: JSON.parse(row.state_json),
+                playerId: row.player_id
             };
         },
-        async listRecentSaves(limit = 6) {
+        async listRecentSaves(limit = 6, playerId) {
             const result = await client.execute({
                 sql: `
                     SELECT session_id, saved_at, turn, location, story_branch, trait_count,
                            arc_title, quest_title, inventory_count, wound_count
                     FROM saves
+                    WHERE player_id = ?
                     ORDER BY datetime(saved_at) DESC
                     LIMIT ?
                 `,
-                args: [limit]
+                args: [normalizePlayerId(playerId), limit]
             });
 
             return result.rows.map((row) => ({
@@ -275,6 +337,8 @@ module.exports = {
     getArcTitleForWorld,
     summarizeSave,
     listRecentSaves,
+    normalizePlayerId,
+    isOwnedByPlayer,
     getStorageConfig,
     createStorage,
     createFileStorage,

@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const crypto = require('crypto');
 const express = require('express');
 const path = require('path');
 const {
@@ -15,6 +16,64 @@ const storage = createStorage(storageConfig);
 // Middleware
 app.disable('x-powered-by');
 app.use(express.json());
+
+const PLAYER_COOKIE_NAME = 'echoes_player_id';
+
+function parseCookies(cookieHeader = '') {
+    return String(cookieHeader || '')
+        .split(';')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .reduce((cookies, part) => {
+            const separatorIndex = part.indexOf('=');
+            if (separatorIndex === -1) {
+                return cookies;
+            }
+
+            const key = decodeURIComponent(part.slice(0, separatorIndex).trim());
+            const value = decodeURIComponent(part.slice(separatorIndex + 1).trim());
+            cookies[key] = value;
+            return cookies;
+        }, {});
+}
+
+function generatePlayerId() {
+    return `player_${crypto.randomUUID()}`;
+}
+
+function isRequestSecure(req) {
+    return req.secure || req.headers['x-forwarded-proto'] === 'https';
+}
+
+function getPlayerCookieOptions(req) {
+    const parts = [
+        'Path=/',
+        'HttpOnly',
+        'SameSite=Lax',
+        'Max-Age=31536000'
+    ];
+
+    if (isRequestSecure(req)) {
+        parts.push('Secure');
+    }
+
+    return parts;
+}
+
+app.use((req, res, next) => {
+    const cookies = parseCookies(req.headers.cookie || '');
+    const existingPlayerId = String(cookies[PLAYER_COOKIE_NAME] || '').trim();
+
+    if (existingPlayerId) {
+        req.playerId = existingPlayerId;
+        return next();
+    }
+
+    const playerId = generatePlayerId();
+    res.append('Set-Cookie', `${PLAYER_COOKIE_NAME}=${encodeURIComponent(playerId)}; ${getPlayerCookieOptions(req).join('; ')}`);
+    req.playerId = playerId;
+    return next();
+});
 
 app.get('/', (_req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
@@ -346,7 +405,7 @@ async function getAiStatus(config = aiConfig, fetchImpl = fetch) {
     };
 }
 
-// Save game state
+// Save game
 app.post('/api/save', async (req, res) => {
     const { sessionId, state } = req.body;
     if (!sessionId || !state) {
@@ -354,9 +413,13 @@ app.post('/api/save', async (req, res) => {
     }
 
     try {
-        await storage.saveGame(sessionId, state);
+        await storage.saveGame(sessionId, state, new Date().toISOString(), req.playerId);
         return res.json({ success: true, message: 'Game saved' });
     } catch (error) {
+        if (error?.code === 'SAVE_OWNERSHIP_MISMATCH') {
+            return res.status(409).json({ error: 'That session belongs to another player' });
+        }
+
         console.error('Failed to save game:', error);
         return res.status(500).json({ error: 'Failed to save game' });
     }
@@ -366,7 +429,7 @@ app.post('/api/save', async (req, res) => {
 app.get('/api/load/:sessionId', async (req, res) => {
     const { sessionId } = req.params;
 
-    const save = await storage.loadGame(sessionId);
+    const save = await storage.loadGame(sessionId, req.playerId);
     if (!save) {
         return res.status(404).json({ error: 'Save not found' });
     }
@@ -374,9 +437,9 @@ app.get('/api/load/:sessionId', async (req, res) => {
     res.json(save);
 });
 
-app.get('/api/saves', async (_req, res) => {
+app.get('/api/saves', async (req, res) => {
     try {
-        return res.json({ saves: await storage.listRecentSaves() });
+        return res.json({ saves: await storage.listRecentSaves(6, req.playerId) });
     } catch (error) {
         console.error('Failed to list saves:', error);
         return res.status(500).json({ error: 'Failed to list saves' });
@@ -505,6 +568,11 @@ module.exports = {
     startServer,
     storage,
     storageConfig,
+    PLAYER_COOKIE_NAME,
+    parseCookies,
+    generatePlayerId,
+    isRequestSecure,
+    getPlayerCookieOptions,
     getAiConfig,
     getAiStatus,
     generateWithOllama,

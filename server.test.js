@@ -1,6 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+    PLAYER_COOKIE_NAME,
+    parseCookies,
+    generatePlayerId,
+    getPlayerCookieOptions,
     parseAiStoryResponse,
     ensureThreeChoices,
     isConfiguredModelInstalled,
@@ -11,6 +15,34 @@ const {
     buildStoryPrompt,
     listRecentSaves
 } = require('./server');
+
+test('parseCookies decodes cookie header values for anonymous player sessions', () => {
+    assert.deepEqual(parseCookies(`${PLAYER_COOKIE_NAME}=player_123; theme=fracture%20blue`), {
+        [PLAYER_COOKIE_NAME]: 'player_123',
+        theme: 'fracture blue'
+    });
+});
+
+test('generatePlayerId returns a prefixed random UUID for browser-scoped saves', () => {
+    const playerId = generatePlayerId();
+    assert.match(playerId, /^player_[0-9a-f-]{36}$/i);
+});
+
+test('getPlayerCookieOptions enables secure cookies only for secure requests', () => {
+    assert.deepEqual(getPlayerCookieOptions({ secure: false, headers: {} }), [
+        'Path=/',
+        'HttpOnly',
+        'SameSite=Lax',
+        'Max-Age=31536000'
+    ]);
+    assert.deepEqual(getPlayerCookieOptions({ secure: false, headers: { 'x-forwarded-proto': 'https' } }), [
+        'Path=/',
+        'HttpOnly',
+        'SameSite=Lax',
+        'Max-Age=31536000',
+        'Secure'
+    ]);
+});
 
 test('parseAiStoryResponse extracts story and all three choices correctly', () => {
     const response = `STORY: The city hums with broken clocks.
