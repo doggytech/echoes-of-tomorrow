@@ -5,6 +5,8 @@ services:
     plan: free
     healthCheckPath: /api/health
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: STORAGE_PROVIDER
         value: turso
       - key: TURSO_DATABASE_URL

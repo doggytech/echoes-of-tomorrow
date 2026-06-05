@@ -157,6 +157,8 @@ test('getAiStatus reports OpenRouter ready when api key and model are configured
 });
 
 test('generateWithOpenRouter sends OpenRouter-compatible chat completions request', async () => {
+    const originalAbortSignal = global.AbortSignal;
+    let capturedTimeoutMs;
     let capturedRequest;
     const config = getAiConfig({
         AI_PROVIDER: 'openrouter',
@@ -164,39 +166,52 @@ test('generateWithOpenRouter sends OpenRouter-compatible chat completions reques
         OPENROUTER_MODEL: 'openai/gpt-4o-mini',
         OPENROUTER_URL: 'https://openrouter.ai/api/v1/chat/completions',
         SITE_URL: 'http://localhost:3000',
-        SITE_NAME: 'Echoes of Tomorrow'
+        SITE_NAME: 'Echoes of Tomorrow',
+        AI_REQUEST_TIMEOUT_MS: '45000'
     });
 
-    const fakeFetch = async (url, options) => {
-        capturedRequest = { url, options };
-        return {
-            ok: true,
-            json: async () => ({
-                choices: [
-                    {
-                        message: {
-                            content: 'STORY: A cloud-powered vision arrives.\nCHOICE1: Accept it | TRAIT: Bold'
-                        }
-                    }
-                ]
-            })
-        };
+    global.AbortSignal = {
+        timeout(ms) {
+            capturedTimeoutMs = ms;
+            return { timeoutMs: ms };
+        }
     };
 
-    const result = await generateWithOpenRouter(config, 'Continue the story.', 'System context here.', fakeFetch);
+    try {
+        const fakeFetch = async (url, options) => {
+            capturedRequest = { url, options };
+            return {
+                ok: true,
+                json: async () => ({
+                    choices: [
+                        {
+                            message: {
+                                content: 'STORY: A cloud-powered vision arrives.\nCHOICE1: Accept it | TRAIT: Bold'
+                            }
+                        }
+                    ]
+                })
+            };
+        };
 
-    assert.equal(result, 'STORY: A cloud-powered vision arrives.\nCHOICE1: Accept it | TRAIT: Bold');
-    assert.equal(capturedRequest.url, 'https://openrouter.ai/api/v1/chat/completions');
-    assert.equal(capturedRequest.options.method, 'POST');
-    assert.equal(capturedRequest.options.headers.Authorization, 'Bearer test-key');
-    assert.equal(capturedRequest.options.headers['HTTP-Referer'], 'http://localhost:3000');
-    assert.equal(capturedRequest.options.headers['X-Title'], 'Echoes of Tomorrow');
+        const result = await generateWithOpenRouter(config, 'Continue the story.', 'System context here.', fakeFetch);
 
-    const body = JSON.parse(capturedRequest.options.body);
-    assert.equal(body.model, 'openai/gpt-4o-mini');
-    assert.equal(body.messages[0].role, 'user');
-    assert.match(body.messages[0].content, /System context here\./);
-    assert.match(body.messages[0].content, /Continue the story\./);
+        assert.equal(result, 'STORY: A cloud-powered vision arrives.\nCHOICE1: Accept it | TRAIT: Bold');
+        assert.equal(capturedTimeoutMs, 45000);
+        assert.equal(capturedRequest.url, 'https://openrouter.ai/api/v1/chat/completions');
+        assert.equal(capturedRequest.options.method, 'POST');
+        assert.equal(capturedRequest.options.headers.Authorization, 'Bearer test-key');
+        assert.equal(capturedRequest.options.headers['HTTP-Referer'], 'http://localhost:3000');
+        assert.equal(capturedRequest.options.headers['X-Title'], 'Echoes of Tomorrow');
+
+        const body = JSON.parse(capturedRequest.options.body);
+        assert.equal(body.model, 'openai/gpt-4o-mini');
+        assert.equal(body.messages[0].role, 'user');
+        assert.match(body.messages[0].content, /System context here\./);
+        assert.match(body.messages[0].content, /Continue the story\./);
+    } finally {
+        global.AbortSignal = originalAbortSignal;
+    }
 });
 
 test('generateWithOllama uses configurable timeout and cheaper generation settings for slower remote hosts', async () => {

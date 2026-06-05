@@ -58,12 +58,14 @@ Instead:
 Use `.env.production.example` as the reference.
 
 Important production choices:
+- `NODE_ENV=production`
 - `STORAGE_PROVIDER=turso`
 - `AI_PROVIDER=openrouter`
 - `TURSO_DATABASE_URL` set in Render
 - `TURSO_AUTH_TOKEN` set in Render
 - `OPENROUTER_API_KEY` set in Render
 - `SITE_URL` set to the real Render service URL
+- `AI_REQUEST_TIMEOUT_MS` set high enough for your chosen OpenRouter model (default here: `60000`)
 
 ### Why Ollama is local-only here
 

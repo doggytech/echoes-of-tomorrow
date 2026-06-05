@@ -84,7 +84,7 @@ async function generateWithOpenRouter(config, prompt, context = '', fetchImpl = 
                 'HTTP-Referer': config.siteUrl,
                 'X-Title': config.siteName
             },
-            signal: AbortSignal.timeout(30000),
+            signal: AbortSignal.timeout(config.requestTimeoutMs),
             body: JSON.stringify({
                 model: config.model,
                 messages: [
