@@ -2,6 +2,24 @@
 
 All notable project-history notes and documentation refreshes for **Echoes of Tomorrow** should be recorded in this file.
 
+## 2026-06-07
+
+### UI polish pass 2
+- added a dramatic impact spotlight that frames the latest consequence before the next decision
+- strengthened choice cards with branch-colored accent rails plus posture, risk, and payoff tags
+- upgraded the loading transition into an animated timeline-resolution panel
+- tightened the mobile layout so decision and consequence cards stay readable on narrower screens
+
+### UI refresh
+- added a stronger cinematic landing hero with a clearer call to action and feature strip
+- promoted the active story scene into a hero panel with branch-aware framing and clearer hierarchy
+- upgraded flat choice buttons into richer choice cards with approach labels and strategic hints
+- reorganized objective, quest, and progression systems into a lower-priority support grid below the story and choices
+
+### Verification reference
+- `npm test` passing (`36/36`)
+- live UI verified locally at `http://127.0.0.1:3000`
+
 ## 2026-06-02
 
 ### Persistence

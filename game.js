@@ -139,6 +139,167 @@ function formatStoryLabel(value, fallback = 'Unknown') {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+const BRANCH_VISUAL_THEMES = {
+    awakening: {
+        id: 'awakening',
+        label: 'Awakening Pulse',
+        accent: 'Rose',
+        mood: 'Reality is still introducing itself, and each choice defines what kind of Echo you are becoming.'
+    },
+    investigation: {
+        id: 'investigation',
+        label: 'Investigative Pressure',
+        accent: 'Cyan',
+        mood: 'Patterns sharpen, hidden structures surface, and every clue suggests a larger machine behind the fracture.'
+    },
+    survival: {
+        id: 'survival',
+        label: 'Fracture Survival',
+        accent: 'Amber',
+        mood: 'The world is unstable, resources are thin, and every calm decision buys you one more turn to endure.'
+    },
+    diplomacy: {
+        id: 'diplomacy',
+        label: 'Diplomatic Tension',
+        accent: 'Gold',
+        mood: 'Trust, reputation, and emotional leverage matter as much as any relic or weapon you could carry.'
+    },
+    momentum: {
+        id: 'momentum',
+        label: 'Momentum Surge',
+        accent: 'Violet',
+        mood: 'Events accelerate, pressure compounds, and decisive action can seize the future before rivals react.'
+    }
+};
+
+function getBranchVisualTheme(worldState = {}) {
+    const branch = String(worldState.storyBranch || 'awakening').trim().toLowerCase();
+    return BRANCH_VISUAL_THEMES[branch] || BRANCH_VISUAL_THEMES.awakening;
+}
+
+function describeChoicePresentation(choice = {}) {
+    const branch = deriveStoryBranchFromChoice(choice, 'awakening');
+
+    if (branch === 'investigation') {
+        return {
+            icon: '🔎',
+            approach: 'Investigate',
+            posture: 'Slow, precise read',
+            risk: 'Lower immediate risk',
+            payoff: 'High information gain',
+            hint: 'Trade speed for clarity and expose how this scene really works.',
+            toneClass: 'choice-investigation'
+        };
+    }
+
+    if (branch === 'survival') {
+        return {
+            icon: '🛡️',
+            approach: 'Stabilize',
+            posture: 'Defensive stabilization',
+            risk: 'Safer, lower upside',
+            payoff: 'Protect health and position',
+            hint: 'Reduce immediate risk and protect your ability to keep moving.',
+            toneClass: 'choice-survival'
+        };
+    }
+
+    if (branch === 'diplomacy') {
+        return {
+            icon: '🤝',
+            approach: 'Connect',
+            posture: 'Social leverage',
+            risk: 'Trust must land',
+            payoff: 'Bonds and reputation',
+            hint: 'Invest in trust, perception, and the people who may shape what happens next.',
+            toneClass: 'choice-diplomacy'
+        };
+    }
+
+    if (branch === 'momentum') {
+        return {
+            icon: '⚔️',
+            approach: 'Commit',
+            posture: 'Aggressive advance',
+            risk: 'Higher immediate danger',
+            payoff: 'Fast progress and pressure',
+            hint: 'Press forward fast and accept that bold action may create new instability.',
+            toneClass: 'choice-momentum'
+        };
+    }
+
+    return {
+        icon: '✨',
+        approach: 'Awaken',
+        posture: 'Exploratory discovery',
+        risk: 'Uncertain outcome',
+        payoff: 'Identity and direction',
+        hint: 'Test the shape of this world and discover what kind of Echo you are becoming.',
+        toneClass: 'choice-awakening'
+    };
+}
+
+function getOutcomeSpotlight(outcome = null) {
+    if (!outcome) {
+        return {
+            label: 'No major consequence yet',
+            tone: 'spotlight-neutral',
+            detail: 'Your next decision will establish the first real pressure on this timeline.'
+        };
+    }
+
+    const relationshipShift = Object.values(outcome.relationshipChanges || {}).reduce((sum, value) => sum + value, 0);
+    const totalDelta = (outcome.healthDelta || 0) + (outcome.memoryDelta || 0) + (outcome.reputationDelta || 0);
+    const woundsAdded = (outcome.woundsAdded || []).length;
+    const woundsRemoved = (outcome.woundsRemoved || []).length;
+
+    if (woundsAdded > 0 || (outcome.healthDelta || 0) < 0) {
+        return {
+            label: 'Aftershock',
+            tone: 'spotlight-danger',
+            detail: 'The fracture pushed back. The next move should account for immediate instability.'
+        };
+    }
+
+    if (outcome.itemGained || (outcome.memoryDelta || 0) > 0) {
+        return {
+            label: 'Breakthrough',
+            tone: 'spotlight-insight',
+            detail: 'You pulled something useful from the scene. Press that advantage before it cools.'
+        };
+    }
+
+    if (relationshipShift > 0 || (outcome.reputationDelta || 0) > 0) {
+        return {
+            label: 'Trust Shift',
+            tone: 'spotlight-bond',
+            detail: 'Someone is leaning closer to your side. Social leverage is on the table right now.'
+        };
+    }
+
+    if (woundsRemoved > 0 || (outcome.healthDelta || 0) > 0) {
+        return {
+            label: 'Stabilized',
+            tone: 'spotlight-recovery',
+            detail: 'You bought breathing room. This is a good window to consolidate or reposition.'
+        };
+    }
+
+    if (totalDelta > 0) {
+        return {
+            label: 'Advantage',
+            tone: 'spotlight-insight',
+            detail: 'The scene tilted in your favor. Decide whether to deepen that edge or cash it in.'
+        };
+    }
+
+    return {
+        label: 'Ripple Effect',
+        tone: 'spotlight-neutral',
+        detail: 'The change is subtle, but the timeline has shifted. Watch what it enables next.'
+    };
+}
+
 const CHARACTER_DISCOVERY_RULES = [
     { name: 'The Archivist', patterns: ['the archivist', 'archivist', 'memory keeper'] },
     { name: 'Kael the Moment-Stolen', patterns: ['kael', 'moment-stolen', 'time thief'] },
@@ -1142,8 +1303,14 @@ function renderGame() {
         return;
     }
 
-    const aiIndicator = GameState.aiEnabled ? 
-        '<span style="color: #4CAF50; font-size: 0.8rem;">🤖 AI Powered</span>' : '';
+    const branchTheme = getBranchVisualTheme(GameState.world);
+    if (typeof document !== 'undefined' && document.body) {
+        document.body.dataset.branchTheme = branchTheme.id;
+    }
+
+    const aiIndicator = GameState.aiEnabled
+        ? '🤖 Live AI scene generation online.'
+        : '🧩 Procedural fallback is steering this scene.';
     const journalEntries = getJournalEntries(GameState.story.history);
     const currentArc = GameState.world.currentArc || getCurrentStoryArc(GameState.world);
     const currentObjective = getCurrentObjective(GameState.world);
@@ -1154,6 +1321,7 @@ function renderGame() {
         `✨ ${GameState.player.traits.length} traits awakened`
     ];
     const latestOutcome = GameState.story.latestOutcome;
+    const outcomeSpotlight = getOutcomeSpotlight(latestOutcome);
     const outcomeDeltas = latestOutcome
         ? [
             formatOutcomeDelta('Health', latestOutcome.healthDelta),
@@ -1172,45 +1340,74 @@ function renderGame() {
     const relationshipEntries = Object.entries(GameState.world.relationships || {})
         .filter(([, value]) => Number.isFinite(value) && value !== 0)
         .sort((left, right) => right[1] - left[1]);
-    
-    container.innerHTML = `
-        <div class="stats-bar">
-            <div class="stat">
-                <div class="stat-label">Health</div>
-                <div class="stat-value">${escapeHtml(String(GameState.player.health ?? ''))}</div>
-            </div>
-            <div class="stat">
-                <div class="stat-label">Memory</div>
-                <div class="stat-value">${escapeHtml(String(GameState.player.memory ?? ''))}</div>
-            </div>
-            <div class="stat">
-                <div class="stat-label">Reputation</div>
-                <div class="stat-value">${escapeHtml(String(GameState.player.reputation ?? ''))}</div>
-            </div>
-            <div class="stat">
-                <div class="stat-label">Turn</div>
-                <div class="stat-value">${escapeHtml(String(GameState.world.turn ?? ''))}</div>
-            </div>
-            <div class="stat">
-                <div class="stat-label">Traits</div>
-                <div class="stat-value">${GameState.player.traits.length}</div>
-            </div>
-        </div>
+    const sceneChoices = GameState.story.currentScene.choices.map((choice) => {
+        const presentation = describeChoicePresentation(choice);
+        return {
+            choice,
+            presentation,
+            traitLabel: formatStoryLabel(choice.trait || presentation.approach, presentation.approach),
+            tone: `${presentation.approach} approach`
+        };
+    });
 
-        <div class="world-panel">
-            <div class="world-badges">
-                ${stateBadges.map((badge) => `<span class="world-badge">${escapeHtml(badge)}</span>`).join('')}
-                <span class="world-badge arc-badge">📜 ${escapeHtml(currentArc.title)}</span>
+    container.innerHTML = `
+        <div class="hero-shell">
+            <div class="stats-bar">
+                <div class="stat">
+                    <div class="stat-label">Health</div>
+                    <div class="stat-value">${escapeHtml(String(GameState.player.health ?? ''))}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Memory</div>
+                    <div class="stat-value">${escapeHtml(String(GameState.player.memory ?? ''))}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Reputation</div>
+                    <div class="stat-value">${escapeHtml(String(GameState.player.reputation ?? ''))}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Turn</div>
+                    <div class="stat-value">${escapeHtml(String(GameState.world.turn ?? ''))}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Traits</div>
+                    <div class="stat-value">${GameState.player.traits.length}</div>
+                </div>
             </div>
-            <div class="objective-card">
-                <div class="objective-label">Current Objective</div>
-                <div class="objective-text">${escapeHtml(currentObjective)}</div>
+
+            <div class="scene-panel scene-${escapeHtml(branchTheme.id)}">
+                <div class="scene-frame">
+                    <div class="scene-header">
+                        <div>
+                            <div class="scene-kicker">${escapeHtml(branchTheme.label)}</div>
+                            <div class="scene-title">${escapeHtml(currentArc.title)}</div>
+                            <div class="scene-mood">${escapeHtml(branchTheme.mood)}</div>
+                        </div>
+                        <div class="scene-status">${escapeHtml(aiIndicator)}</div>
+                    </div>
+
+                    <div class="meta-strip">
+                        ${stateBadges.map((badge) => `<span class="meta-pill">${escapeHtml(badge)}</span>`).join('')}
+                        <span class="meta-pill arc-badge">Accent: ${escapeHtml(branchTheme.accent)}</span>
+                    </div>
+
+                    <div class="story-panel">
+                        <div class="story-text narrative">${formatText(GameState.story.currentScene.text)}</div>
+                    </div>
+                </div>
             </div>
+
             ${latestOutcome ? `
-                <div class="consequence-panel">
-                    <div class="objective-label">Latest Consequence</div>
-                    <div class="objective-text">${escapeHtml(latestOutcome.summary)}</div>
-                    ${outcomeDeltas.length > 0 ? `<div class="consequence-deltas">${outcomeDeltas.map((delta) => `<span class="journal-trait">${escapeHtml(delta)}</span>`).join('')}</div>` : ''}
+                <div class="impact-spotlight ${escapeHtml(outcomeSpotlight.tone)}">
+                    <div class="impact-header">
+                        <div>
+                            <div class="panel-title">Latest impact</div>
+                            <div class="impact-title">${escapeHtml(outcomeSpotlight.label)}</div>
+                        </div>
+                        <div class="impact-summary">${escapeHtml(latestOutcome.summary)}</div>
+                    </div>
+                    <div class="impact-detail">${escapeHtml(outcomeSpotlight.detail)}</div>
+                    ${outcomeDeltas.length > 0 ? `<div class="consequence-deltas">${outcomeDeltas.map((delta) => `<span class="journal-trait impact-chip">${escapeHtml(delta)}</span>`).join('')}</div>` : ''}
                     ${(latestOutcome.itemGained || (latestOutcome.woundsAdded || []).length > 0 || (latestOutcome.woundsRemoved || []).length > 0 || (latestOutcome.relationshipChanges && Object.keys(latestOutcome.relationshipChanges).length > 0)) ? `
                         <div class="resource-list consequence-list">
                             ${latestOutcome.itemGained ? `<span class="resource-chip resource-positive">Item gained: ${escapeHtml(latestOutcome.itemGained.name)}</span>` : ''}
@@ -1221,84 +1418,120 @@ function renderGame() {
                     ` : ''}
                 </div>
             ` : ''}
-        </div>
 
-        <div class="quest-panel">
-            <div class="panel-title">Current Quest Chain</div>
-            <div class="resume-title">${escapeHtml(currentQuest.title)}</div>
-            <div class="quest-stage">Stage: ${escapeHtml(currentQuest.stageLabel)}</div>
-            <div class="quest-progress">Progress: ${escapeHtml(`${currentQuest.progress}/${currentQuest.totalStages}`)}</div>
-            <div class="objective-text">${escapeHtml(currentQuest.objective)}</div>
-        </div>
-
-        <div class="faction-panel">
-            <div class="panel-title">Faction Reactions</div>
-            ${factionStandings.length > 0
-                ? `<div class="standing-list">${factionStandings.map(([name, standing]) => {
-                    const standingClass = standing > 0 ? 'standing-positive' : standing < 0 ? 'standing-negative' : 'standing-neutral';
-                    const standingLabel = standing > 0 ? `+${standing}` : `${standing}`;
-                    return `<div class="standing-row ${standingClass}"><span>${escapeHtml(name)}</span><span class="standing-value">${escapeHtml(standingLabel)}</span></div>`;
-                }).join('')}</div>`
-                : '<div class="journal-empty">No faction has reacted strongly to you yet.</div>'}
-        </div>
-
-        <div class="inventory-panel resource-panel">
-            <div class="panel-title">Inventory</div>
-            ${inventoryItems.length > 0
-                ? `<div class="resource-list">${inventoryItems.map((item) => `<span class="resource-chip resource-positive">${escapeHtml(item.name)}</span>`).join('')}</div>`
-                : '<div class="journal-empty">No meaningful relics secured yet.</div>'}
-        </div>
-
-        <div class="relationship-panel resource-panel">
-            <div class="panel-title">Bonds</div>
-            ${relationshipEntries.length > 0
-                ? `<div class="standing-list">${relationshipEntries.map(([name, value]) => {
-                    const relationClass = value > 0 ? 'standing-positive' : value < 0 ? 'standing-negative' : 'standing-neutral';
-                    const relationLabel = value > 0 ? `+${value}` : `${value}`;
-                    return `<div class="standing-row ${relationClass}"><span>${escapeHtml(name)}</span><span class="standing-value">${escapeHtml(relationLabel)}</span></div>`;
-                }).join('')}</div>`
-                : '<div class="journal-empty">No personal bonds have shifted yet.</div>'}
-        </div>
-
-        <div class="wounds-panel resource-panel">
-            <div class="panel-title">Wounds & Recovery</div>
-            ${activeWounds.length > 0
-                ? `<div class="standing-list">${activeWounds.map((wound) => `<div class="standing-row standing-negative"><span>${escapeHtml(wound.name)}</span><span class="standing-value">${escapeHtml(formatStoryLabel(wound.severity, 'Moderate'))}</span></div>`).join('')}</div>`
-                : '<div class="journal-empty">You are currently steady enough to avoid lingering wounds.</div>'}
-        </div>
-        
-        <div class="story-panel">
-            <div class="story-text narrative">${formatText(GameState.story.currentScene.text)}</div>
-            ${aiIndicator}
-        </div>
-
-        <div class="threads-panel">
-            <div class="panel-title">Echo Threads</div>
-            ${knownThreads.length > 0
-                ? `<div class="thread-list">${knownThreads.map((thread) => `<span class="thread-pill"><strong>${escapeHtml(thread.type)}:</strong> ${escapeHtml(thread.name)}</span>`).join('')}</div>`
-                : '<div class="journal-empty">You have not formed any lasting connections yet.</div>'}
-        </div>
-
-        <div class="journal-panel">
-            <div class="panel-title">Journey Timeline</div>
-            ${journalEntries.length > 0
-                ? journalEntries.map((entry) => `
-                    <div class="journal-entry">
-                        <div class="journal-turn">Turn ${escapeHtml(String(entry.turn ?? '?'))}</div>
-                        <div class="journal-choice">${escapeHtml(entry.choiceText)}</div>
-                        <div class="journal-trait">${escapeHtml(entry.traitLabel)}</div>
-                        ${entry.outcomeSummary ? `<div class="journal-outcome">${escapeHtml(entry.outcomeSummary)}</div>` : ''}
+            <div class="decision-panel">
+                <div class="decision-header">
+                    <div>
+                        <div class="panel-title">Choose your next move</div>
+                        <div class="decision-title">Pick the pressure you want to create.</div>
                     </div>
-                `).join('')
-                : '<div class="journal-empty">Your first decision will echo here.</div>'}
-        </div>
-        
-        <div class="choices-panel">
-            ${GameState.story.currentScene.choices.map(choice => `
-                <button class="choice-btn" data-choice-id="${escapeHtml(String(choice.id ?? ''))}">
-                    ${escapeHtml(String(choice.text ?? ''))}
-                </button>
-            `).join('')}
+                    <div class="decision-copy">Each option now signals its posture, risk, and likely reward before you commit.</div>
+                </div>
+
+                <div class="choice-grid">
+                    ${sceneChoices.map(({ choice, presentation, traitLabel, tone }) => `
+                        <button class="choice-card ${escapeHtml(presentation.toneClass)}" data-choice-id="${escapeHtml(String(choice.id ?? ''))}">
+                            <div class="choice-accent"></div>
+                            <div class="choice-topline">
+                                <span class="choice-icon">${escapeHtml(presentation.icon)}</span>
+                                <span class="choice-approach">${escapeHtml(traitLabel)}</span>
+                            </div>
+                            <span class="choice-label">${escapeHtml(String(choice.text ?? ''))}</span>
+                            <span class="choice-tone">${escapeHtml(tone)}</span>
+                            <div class="choice-tags">
+                                <span class="choice-tag">Posture: ${escapeHtml(presentation.posture)}</span>
+                                <span class="choice-tag">Risk: ${escapeHtml(presentation.risk)}</span>
+                                <span class="choice-tag">Payoff: ${escapeHtml(presentation.payoff)}</span>
+                            </div>
+                            <span class="choice-hint">${escapeHtml(presentation.hint)}</span>
+                            <span class="choice-best-when">Best when you want ${escapeHtml(presentation.payoff.toLowerCase())}.</span>
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="focus-strip">
+                <div class="world-panel">
+                    <div class="panel-title">Current Pressure</div>
+                    <div class="objective-card">
+                        <div class="objective-label">Current Objective</div>
+                        <div class="objective-text">${escapeHtml(currentObjective)}</div>
+                    </div>
+                    ${latestOutcome ? `
+                        <div class="consequence-panel">
+                            <div class="objective-label">Current consequence posture</div>
+                            <div class="objective-text">${escapeHtml(outcomeSpotlight.detail)}</div>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="quest-panel">
+                    <div class="panel-title">Quest Chain</div>
+                    <div class="resume-title">${escapeHtml(currentQuest.title)}</div>
+                    <div class="quest-stage">Stage: ${escapeHtml(currentQuest.stageLabel)}</div>
+                    <div class="quest-progress">Progress: ${escapeHtml(`${currentQuest.progress}/${currentQuest.totalStages}`)}</div>
+                    <div class="objective-text">${escapeHtml(currentQuest.objective)}</div>
+                </div>
+            </div>
+
+            <div class="system-grid">
+                <div class="faction-panel">
+                    <div class="panel-title">Faction Reactions</div>
+                    ${factionStandings.length > 0
+                        ? `<div class="standing-list">${factionStandings.map(([name, standing]) => {
+                            const standingClass = standing > 0 ? 'standing-positive' : standing < 0 ? 'standing-negative' : 'standing-neutral';
+                            const standingLabel = standing > 0 ? `+${standing}` : `${standing}`;
+                            return `<div class="standing-row ${standingClass}"><span>${escapeHtml(name)}</span><span class="standing-value">${escapeHtml(standingLabel)}</span></div>`;
+                        }).join('')}</div>`
+                        : '<div class="journal-empty">No faction has reacted strongly to you yet.</div>'}
+                </div>
+
+                <div class="inventory-panel resource-panel">
+                    <div class="panel-title">Inventory</div>
+                    ${inventoryItems.length > 0
+                        ? `<div class="resource-list">${inventoryItems.map((item) => `<span class="resource-chip resource-positive">${escapeHtml(item.name)}</span>`).join('')}</div>`
+                        : '<div class="journal-empty">No meaningful relics secured yet.</div>'}
+                </div>
+
+                <div class="relationship-panel resource-panel">
+                    <div class="panel-title">Bonds</div>
+                    ${relationshipEntries.length > 0
+                        ? `<div class="standing-list">${relationshipEntries.map(([name, value]) => {
+                            const relationClass = value > 0 ? 'standing-positive' : value < 0 ? 'standing-negative' : 'standing-neutral';
+                            const relationLabel = value > 0 ? `+${value}` : `${value}`;
+                            return `<div class="standing-row ${relationClass}"><span>${escapeHtml(name)}</span><span class="standing-value">${escapeHtml(relationLabel)}</span></div>`;
+                        }).join('')}</div>`
+                        : '<div class="journal-empty">No personal bonds have shifted yet.</div>'}
+                </div>
+
+                <div class="wounds-panel resource-panel">
+                    <div class="panel-title">Wounds & Recovery</div>
+                    ${activeWounds.length > 0
+                        ? `<div class="standing-list">${activeWounds.map((wound) => `<div class="standing-row standing-negative"><span>${escapeHtml(wound.name)}</span><span class="standing-value">${escapeHtml(formatStoryLabel(wound.severity, 'Moderate'))}</span></div>`).join('')}</div>`
+                        : '<div class="journal-empty">You are currently steady enough to avoid lingering wounds.</div>'}
+                </div>
+
+                <div class="threads-panel">
+                    <div class="panel-title">Echo Threads</div>
+                    ${knownThreads.length > 0
+                        ? `<div class="thread-list">${knownThreads.map((thread) => `<span class="thread-pill"><strong>${escapeHtml(thread.type)}:</strong> ${escapeHtml(thread.name)}</span>`).join('')}</div>`
+                        : '<div class="journal-empty">You have not formed any lasting connections yet.</div>'}
+                </div>
+
+                <div class="journal-panel">
+                    <div class="panel-title">Journey Timeline</div>
+                    ${journalEntries.length > 0
+                        ? journalEntries.map((entry) => `
+                            <div class="journal-entry">
+                                <div class="resume-title">Turn ${escapeHtml(String(entry.turn ?? '?'))}</div>
+                                <div class="journal-choice">${escapeHtml(entry.choiceText)}</div>
+                                <div class="journal-trait">${escapeHtml(entry.traitLabel)}</div>
+                                ${entry.outcomeSummary ? `<div class="journal-outcome">${escapeHtml(entry.outcomeSummary)}</div>` : ''}
+                            </div>
+                        `).join('')
+                        : '<div class="journal-empty">Your first decision will echo here.</div>'}
+                </div>
+            </div>
         </div>
     `;
 }
@@ -1306,9 +1539,15 @@ function renderGame() {
 function showLoading() {
     const container = document.getElementById('game-content');
     container.innerHTML = `
-        <div class="loading" style="text-align: center; padding: 60px;">
-            <div style="font-size: 3rem; margin-bottom: 20px;">✨</div>
-            <div style="color: #a0a0a0;">The fracture is weaving your story...</div>
+        <div class="loading">
+            <div class="loading-orb" aria-hidden="true">
+                <span class="loading-ring loading-ring-one"></span>
+                <span class="loading-ring loading-ring-two"></span>
+                <span class="loading-core">✨</span>
+            </div>
+            <div class="panel-title" style="margin-bottom: 12px;">Resolving the next echo</div>
+            <div class="loading-title">The timeline is folding your last consequence into the next scene.</div>
+            <div class="loading-copy">Memory, pressure, and faction response are being rethreaded before your next move appears.</div>
         </div>
     `;
 }
@@ -1319,7 +1558,7 @@ function escapeHtml(text) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
+        .replace(/\"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
 
@@ -1334,6 +1573,10 @@ function formatText(text) {
 
 // Start Screen
 function renderStartScreen(container) {
+    if (typeof document !== 'undefined' && document.body) {
+        document.body.dataset.branchTheme = 'awakening';
+    }
+
     const recentSavesMarkup = GameState.recentSaves.length > 0
         ? `
             <div class="resume-panel">
@@ -1369,11 +1612,23 @@ function renderStartScreen(container) {
 
     container.innerHTML = `
         <div class="start-screen">
-            <h2>The Fracture Awaits</h2>
-            <p>In a world where time itself has shattered, you are an Echo—a being who can move between fragments of reality. Every choice you make resonates across timelines, shaping not just your fate, but the fate of countless worlds.</p>
-            <p>This is a procedural storytelling experience powered by local AI. Each playthrough generates a unique narrative based on your choices.</p>
-            <p>Your saved story stays with this browser and device for now, so switching devices or clearing browser data may hide your echo.</p>
-            <button class="start-btn" data-start-game="true">Begin Your Journey</button>
+            <div class="landing-hero">
+                <div class="hero-kicker">Fractured narrative command</div>
+                <div class="landing-title">Step into a broken timeline and decide what kind of Echo survives it.</div>
+                <div class="landing-copy">
+                    <p>In a world where time itself has shattered, you move between fragments of reality, shaping factions, relationships, wounds, and hard-won momentum with every turn.</p>
+                    <p>Each run blends procedural storytelling, persistent character state, and AI-assisted scene generation into a narrative that reacts to the choices you actually make.</p>
+                </div>
+                <div class="feature-strip">
+                    <span class="feature-pill">⚙️ Procedural scenes</span>
+                    <span class="feature-pill">🧠 AI-assisted storytelling</span>
+                    <span class="feature-pill">🎒 Persistent inventory, bonds, and wounds</span>
+                </div>
+                <div class="landing-actions">
+                    <button class="start-btn" data-start-game="true">Begin Your Journey</button>
+                    <div class="landing-note">Your active echo stays with this browser and device for now, so clearing browser data or switching devices may hide the run.</div>
+                </div>
+            </div>
             ${recentSavesMarkup}
         </div>
     `;
@@ -1487,6 +1742,9 @@ if (typeof module !== 'undefined') {
         getCurrentStoryArc,
         discoverWorldEntities,
         getBranchSceneGuidance,
-        enhanceSceneChoices
+        enhanceSceneChoices,
+        getBranchVisualTheme,
+        describeChoicePresentation,
+        getOutcomeSpotlight
     };
 }

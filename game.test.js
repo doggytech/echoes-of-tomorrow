@@ -8,7 +8,10 @@ const {
     getChoiceOutcome,
     getCurrentStoryArc,
     getBranchSceneGuidance,
-    enhanceSceneChoices
+    enhanceSceneChoices,
+    getBranchVisualTheme,
+    describeChoicePresentation,
+    getOutcomeSpotlight
 } = require('./game');
 
 test('deriveNextWorldState advances branch and location based on the chosen path and next scene', () => {
@@ -124,6 +127,53 @@ test('getCurrentObjective translates the active branch into a player-facing goal
     assert.equal(getCurrentObjective({ storyBranch: 'investigation' }), 'Uncover how this fragment of reality fits into the larger fracture.');
     assert.equal(getCurrentObjective({ storyBranch: 'survival' }), 'Stabilize the danger around you before the fracture gets worse.');
     assert.equal(getCurrentObjective({ storyBranch: 'awakening' }), 'Orient yourself and discover what kind of Echo you will become.');
+});
+
+test('getBranchVisualTheme returns branch-aware mood framing for the active run', () => {
+    assert.deepEqual(getBranchVisualTheme({ storyBranch: 'investigation' }), {
+        id: 'investigation',
+        label: 'Investigative Pressure',
+        accent: 'Cyan',
+        mood: 'Patterns sharpen, hidden structures surface, and every clue suggests a larger machine behind the fracture.'
+    });
+
+    assert.equal(getBranchVisualTheme({ storyBranch: 'survival' }).label, 'Fracture Survival');
+    assert.equal(getBranchVisualTheme({ storyBranch: 'diplomacy' }).accent, 'Gold');
+    assert.equal(getBranchVisualTheme({ storyBranch: 'momentum' }).id, 'momentum');
+    assert.equal(getBranchVisualTheme({ storyBranch: 'unknown_branch' }).id, 'awakening');
+});
+
+test('describeChoicePresentation turns traits into distinct choice-card framing', () => {
+    assert.deepEqual(describeChoicePresentation({ trait: 'analytical' }), {
+        icon: '🔎',
+        approach: 'Investigate',
+        posture: 'Slow, precise read',
+        risk: 'Lower immediate risk',
+        payoff: 'High information gain',
+        hint: 'Trade speed for clarity and expose how this scene really works.',
+        toneClass: 'choice-investigation'
+    });
+
+    assert.equal(describeChoicePresentation({ trait: 'caution' }).approach, 'Stabilize');
+    assert.equal(describeChoicePresentation({ trait: 'caution' }).risk, 'Safer, lower upside');
+    assert.equal(describeChoicePresentation({ trait: 'empathic' }).toneClass, 'choice-diplomacy');
+    assert.equal(describeChoicePresentation({ trait: 'empathic' }).payoff, 'Bonds and reputation');
+    assert.equal(describeChoicePresentation({ trait: 'decisive' }).icon, '⚔️');
+    assert.equal(describeChoicePresentation({ trait: 'decisive' }).posture, 'Aggressive advance');
+});
+
+test('getOutcomeSpotlight categorizes player-facing consequence framing for the UI', () => {
+    assert.deepEqual(getOutcomeSpotlight(null), {
+        label: 'No major consequence yet',
+        tone: 'spotlight-neutral',
+        detail: 'Your next decision will establish the first real pressure on this timeline.'
+    });
+
+    assert.equal(getOutcomeSpotlight({ healthDelta: -1, woundsAdded: [] }).label, 'Aftershock');
+    assert.equal(getOutcomeSpotlight({ memoryDelta: 1 }).label, 'Breakthrough');
+    assert.equal(getOutcomeSpotlight({ reputationDelta: 1 }).label, 'Trust Shift');
+    assert.equal(getOutcomeSpotlight({ healthDelta: 1, woundsRemoved: ['fracture_burn'] }).label, 'Stabilized');
+    assert.equal(getOutcomeSpotlight({ healthDelta: 0, memoryDelta: 0, reputationDelta: 0 }).label, 'Ripple Effect');
 });
 
 test('getChoiceOutcome turns investigation traits into visible stat gains and feedback', () => {
